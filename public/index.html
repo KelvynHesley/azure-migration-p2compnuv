@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Migração Drive > Azure</title>
+    <style>
+        :root {
+            --primary: #0078D4;
+            --primary-hover: #005A9E;
+            --success: #107C10;
+            --success-hover: #0B5A0B;
+            --danger: #D13438;
+            --danger-hover: #A80000;
+            --bg-color: #f3f2f1;
+            --card-bg: #ffffff;
+            --text-main: #323130;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding: 40px 20px;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            color: var(--primary);
+            border-bottom: 2px solid #edebe9;
+            padding-bottom: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 25px 0;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+
+        button.btn-success {
+            background: var(--success);
+        }
+
+        button.btn-success:hover {
+            background: var(--success-hover);
+        }
+
+        button.btn-danger {
+            background: var(--danger);
+        }
+
+        button.btn-danger:hover {
+            background: var(--danger-hover);
+        }
+
+        .lists {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .list-box {
+            background: #faf9f8;
+            border: 1px solid #edebe9;
+            padding: 20px;
+            border-radius: 8px;
+            min-height: 200px;
+        }
+
+        .list-box h3 {
+            margin-top: 0;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .badge {
+            font-size: 0.8rem;
+            background: #e1dfdd;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        li {
+            padding: 10px;
+            border-bottom: 1px solid #edebe9;
+            font-size: 0.95rem;
+        }
+
+        li:last-child {
+            border-bottom: none;
+        }
+
+        .console-container {
+            margin-top: 30px;
+        }
+
+        .log-box {
+            background: #1e1e1e;
+            color: #4af626;
+            padding: 15px;
+            border-radius: 8px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .log-error {
+            color: #ff5555;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1> Painel de Migração de Arquivos</h1>
+
+        <div class="button-group">
+            <button onclick="listarDrive()">📂 Listar Origem</button>
+            <button onclick="listarAzure()">☁️ Listar Destino</button>
+            <button class="btn-success" onclick="iniciarMigracao()">▶️ Iniciar Migração</button>
+            <button class="btn-danger" onclick="limparAzure()">🗑️ Limpar Azure</button>
+        </div>
+
+        <div class="lists">
+            <div class="list-box">
+                <h3>Google Drive <span class="badge" id="drive-count">0</span></h3>
+                <ul id="drive-list">
+                    <li style="color: #605e5c; text-align: center;">Clique em Listar Origem...</li>
+                </ul>
+            </div>
+            <div class="list-box">
+                <h3>Azure Blob Storage <span class="badge" id="azure-count">0</span></h3>
+                <ul id="azure-list">
+                    <li style="color: #605e5c; text-align: center;">Clique em Listar Destino...</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="console-container">
+            <h3>Terminal de Operações</h3>
+            <div class="log-box" id="terminal">Sistema pronto. Aguardando comandos...</div>
+        </div>
+    </div>
+
+    <script>
+        function logMsg(msg, isError = false) {
+            const term = document.getElementById('terminal');
+            const colorClass = isError ? 'log-error' : '';
+            term.innerHTML += `<div class="${colorClass}">> ${msg}</div>`;
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function updateList(elementId, countId, data) {
+            const listElement = document.getElementById(elementId);
+            document.getElementById(countId).innerText = data.length;
+
+            if (data.length === 0) {
+                listElement.innerHTML = '<li style="color: #605e5c; text-align: center;">Nenhum arquivo encontrado.</li>';
+                return;
+            }
+            listElement.innerHTML = data.map(f => `<li>📄 ${f.name}</li>`).join('');
+        }
+
+        async function listarDrive() {
+            logMsg("Buscando arquivos no Google Drive...");
+            try {
+                const res = await fetch('/api/drive/files');
+                const data = await res.json();
+                updateList('drive-list', 'drive-count', data);
+                logMsg("Listagem do Drive concluída.");
+            } catch (err) {
+                logMsg(`Erro ao listar Drive: ${err.message}`, true);
+            }
+        }
+
+        async function listarAzure() {
+            logMsg("Buscando arquivos no Azure Blob Storage...");
+            try {
+                const res = await fetch('/api/azure/files');
+                const data = await res.json();
+                updateList('azure-list', 'azure-count', data);
+                logMsg("Listagem do Azure concluída.");
+            } catch (err) {
+                logMsg(`Erro ao listar Azure: ${err.message}`, true);
+            }
+        }
+
+        async function iniciarMigracao() {
+            logMsg("Iniciando processo de migração...");
+            try {
+                const res = await fetch('/api/migrate', { method: 'POST' });
+                const data = await res.json();
+
+                if (!res.ok || data.error) {
+                    logMsg(`[FALHA] ${data.error || 'Erro desconhecido no servidor'}`, true);
+                    return;
+                }
+
+                data.logs.forEach(msg => logMsg(msg, msg.includes('[ERRO]')));
+                listarAzure(); // Atualiza a lista automaticamente após migrar
+            } catch (err) {
+                logMsg(`[ERRO DE CONEXÃO] ${err.message}`, true);
+            }
+        }
+
+        async function limparAzure() {
+            if (!confirm("Tem certeza que deseja apagar TODOS os arquivos do Azure?")) return;
+
+            logMsg("Iniciando exclusão de arquivos no Azure...");
+            try {
+                const res = await fetch('/api/azure/clear', { method: 'DELETE' });
+                const data = await res.json();
+
+                if (!res.ok || data.error) {
+                    logMsg(`[FALHA] ${data.error || 'Erro desconhecido'}`, true);
+                    return;
+                }
+
+                data.logs.forEach(msg => logMsg(msg));
+                listarAzure(); // Atualiza a lista para mostrar que ficou vazio
+            } catch (err) {
+                logMsg(`[ERRO DE CONEXÃO] ${err.message}`, true);
+            }
+        }
+    </script>
+</body>
+
+</html>
